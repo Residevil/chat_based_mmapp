@@ -39,6 +39,7 @@ function App() {
       console.error('Socket connection error:', error);
       setSocketConnected(false);
     });
+
   
     return () => {
       socket.off('connect');
@@ -49,33 +50,59 @@ function App() {
     };
   }, []);
 
+  // useEffect(() => {
+  //   console.log('mindMap state changed:', mindMap);
+  // }, [mindMap]);
+
   const handleChatInput = async (input) => {
     try {
-      const response = await axios.post(`${API_URL}/api/generate_map`, { input });
+      const response = await axios.post(`${API_URL}/api/generate_map`, { input: input });
+      console.log('Received mind map data:', response.data)
       setMindMap(response.data);
     } catch (error) {
       console.error('Error generating mind map:', error);
-      // Handle the error(e.g. show a message to the user)
+      if (error.response && error.response.data && error.response.data.error) {
+        alert(`Error: ${error.response.data.error}`);
+      } else {
+        alert('An error occurred while generating the mind map. Please try again.');
+      }
     }
-    // const response = await fetch('/api/generate_map', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ input }),
-    // });
-    // const newMap = await response.json();
-    // setMindMap(newMap);
   };
 
   const handleMapUpdate = (changes) => {
     // send update to the server
-    socket.emit('update_map', { map: mindMap, changes });
+    if (changes.updatedNode) {
+      const updateNode = (node) => {
+        if (node.name === changes.updatedNode.id) {
+          return { ...node, name: changes.updatedNode.data.label, attributes: { notes: changes.updateNode.data.note } };
+        }
+        if (node.children) {
+          return { ...node, children: node.children.map(updateNode) };
+        }
+        return node;
+      };
+      const updatedMap = updateNode(mindMap);
+      setMindMap(updatedMap);
+      socket.emit('update_map', { map: updatedMap, changes });
+    } 
   };
 
   return (
-    <div className="App">
-      <p>Socket status: {socket.connected ? 'Connected' : 'Disconnected'}</p>
-      <ChatInterface onSubmit={handleChatInput} />
-      {mindMap && <MindMap data={mindMap} onUpdate={handleMapUpdate} />}
+    <div className="App" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div>
+        <p>Socket status: {socket.connected ? 'Connected' : 'Disconnected'}</p>
+        {mindMap ? (
+          <>
+            <MindMap data={mindMap} onUpdate={handleMapUpdate} />
+            {/* <pre>{JSON.stringify(mindMap, null, 2)}</pre> */}
+          </>
+        ) : (
+          <p>No mind map data available. Please enter some text.</p>
+        )}
+      </div>
+      <div style={{ borderTop: '1px solid #ccc', padding: '10px' }}>
+        <ChatInterface onSubmit={handleChatInput} />
+      </div>
     </div>
 
   );

@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO
 from flask_cors import CORS
-from mind_map_generator import generate_mind_map, update_mind_map
+from mind_map_generator import generate_mind_map, update_mind_map, logger
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}}) # This enables CORS for all routes
@@ -19,10 +19,15 @@ def generate_map():
         user_input = data['input']
         print(f"User input: {user_input}")  # Log user input
         print(f"User input type: {type(user_input)}")  # Log user input type
+
         mind_map = generate_mind_map(user_input)
+        
+        # Clear existing data and set the new mind map
+        socketio.emit('clear_map')
+        socketio.emit('map_updated', mind_map)
         return jsonify(mind_map), 200
     except Exception as e:
-        # print(f"Error generating mind map: {str(e)}")
+        logger.error(f"Error generating mind map: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @socketio.on('update_map')

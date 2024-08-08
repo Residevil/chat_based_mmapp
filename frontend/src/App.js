@@ -54,9 +54,9 @@ function App() {
   //   console.log('mindMap state changed:', mindMap);
   // }, [mindMap]);
 
-  const handleChatInput = async (input) => {
+  const handleChatInput = async (conversationHistory) => {
     try {
-      const response = await axios.post(`${API_URL}/api/generate_map`, { input: input });
+      const response = await axios.post(`${API_URL}/api/generate_map`, { input: conversationHistory });
       console.log('Received mind map data:', response.data)
       setMindMap(response.data);
     } catch (error) {
@@ -97,10 +97,10 @@ function App() {
             {/* <pre>{JSON.stringify(mindMap, null, 2)}</pre> */}
           </>
         ) : (
-          <p>No mind map data available. Please enter some text.</p>
+          <p>No mind map data available. Please enter some text or create a new mind map.</p>
         )}
       </div>
-      <div style={{ borderTop: '1px solid #ccc', padding: '10px' }}>
+      <div style={{ borderTop: '1px solid #ccc', padding: '50px 20px' }}>
         <ChatInterface onSubmit={handleChatInput} />
       </div>
     </div>

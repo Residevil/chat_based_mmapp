@@ -1,81 +1,166 @@
-import React, { useState, useCallback, useRef } from 'react';
-import ReactFlow, {
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  ReactFlow,
   Controls,
   Background,
   useNodesState,
   useEdgesState,
+  MiniMap,
   addEdge,
   MarkerType,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+  getIncomers,
+  getOutgoers,
+  getConnectedEdges,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { toPng } from 'html-to-image';
+import io from 'socket.io-client';
 
-// Custom node component
-const CustomNode = ({ id, data, isConnectable }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [label, setLabel] = useState(data.label);
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+const socket = io(SOCKET_URL);
 
-  const handleDoubleClick = () => {
-    setIsEditing(true);
-  }
+// const initialNodes = [
+//   {
+//     id: "1",
+//     type: "input",
+//     data: { label: "Mind Map" },
+//     position: { x: 0, y: 0 },
+//   },
+// ];
 
-  const handleBlur =() => {
-    setIsEditing(false);
-    data.onNodesChange(label);
-  }
+// const initialEdges = []
 
-  // const handleAddChild = () => {
-  //   data.onAddChild(id)
-  // }
+const onLoad = (reactFlowInstance) => {
+  console.log('flow loaded:', reactFlowInstance);
+  reactFlowInstance.fitView()
+}
+
+// // Custom node component
+// const CustomNode = ({ id, data, isConnectable }) => {
+//   const [isEditing, setIsEditing] = useState(false);
+//   const [label, setLabel] = useState(data.label);
+
+//   const handleDoubleClick = () => {
+//     setIsEditing(true);
+//   }
+
+//   const handleBlur =() => {
+//     setIsEditing(false);
+//     data.onNodesChange({ id, label });
+//   }
+
+//   // const handleAddChild = () => {
+//   //   data.onAddChild(id)
+//   // }
+
+//   const handleDelete = () => {
+//     data.onDelete(id);
+//   }
   
-  return (
-    <div
-      style={{
-        padding: '10px',
-        border: '1px solid #ddd',
-        borderRadius: '5px',
-        background: 'white',
-        minWidth: '150px',
-      }}
-      onDoubleClick={handleDoubleClick}
-    >
-      {isEditing ? (
-        <input
-          type="text"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onBlur={handleBlur}
-          autoFocus
-        />
-      ) : (
-        <div>{label}</div>
-      )}
-      {data.note && <div style={{ fontSize: '0.8em', color: '#666' }}>{data.note}</div>}
-    </div>
-  );
-};
+//   return (
+//     <div
+//       style={{
+//         padding: '10px',
+//         border: '1px solid #ddd',
+//         borderRadius: '5px',
+//         background: 'white',
+//         minWidth: '150px',
+//       }}
+//       onDoubleClick={handleDoubleClick}
+//     >
+//       {isEditing ? (
+//         <input
+//           type="text"
+//           value={label}
+//           onChange={(e) => setLabel(e.target.value)}
+//           onBlur={handleBlur}
+//           autoFocus
+//         />
+//       ) : (
+//         <div>{label}</div>
+//       )}
+//       {data.note && <div style={{ fontSize: '0.8em', color: '#666' }}>{data.note}</div>}
+//     </div>
+//   );
+// };
 
-const nodeTypes = {
-  custom: CustomNode,
-};
+// const nodeTypes = {
+//   custom: CustomNode,
+// };
 
 function MindMap({ data, onUpdate }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [name, setName] = useState("");
   // const [translate, setTranslate] = useState({ x: 300, y: 50 });
   // const [editingNode, setEditingNode] = useState(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const reactFlowWrapper = useRef(null);
   const reactFlowInstance = useRef(null);
   // const [connectionMode, setConnectionMode] = useState(null);
 
+  // useEffect(() => {
+  //   socket.on('clear_map', () => {
+  //     setNodes([]);
+  //     setEdges([]);
+  //   });
+
+  //   socket.on('map_updated', (updatedMap) => {
+  //     const { nodes: newNodes, edges: newEdges } = convertToReactFlowFormat(updatedMap);
+  //     setNodes(newNodes);
+  //     setEdges(newEdges);
+  //   });
+
+  //   return () => {
+  //     socket.off('clear_map');
+  //     socket.off('map_updated');
+  //   };
+  // }, [setNodes, setEdges]);
+
+  const new_mind_map = useCallback(() => {
+    setNodes([]);
+    setEdges([]);
+    onUpdate({ updatedMap: { nodes: [], edges: [] } });
+  }, [setNodes, setEdges, onUpdate]);
+
+  const handleNewMindMap = () => {
+    setShowConfirmation(true);
+  };
+
+  const handleConfirmation = (confirmed) => {
+    setShowConfirmation(false);
+    if (confirmed) {
+      new_mind_map();
+    }
+  };
+
   // Convert mind map data to React Flow format
-  React.useEffect(() => {
+  useEffect(() => {
     if (data) {
       const { nodes: newNodes, edges: newEdges } = convertToReactFlowFormat(data);
       setNodes(newNodes);
       setEdges(newEdges);
+    } else {
+      // Reset the mind map when there's no data
+      setNodes([]);
+      setEdges([]);
+      refreshPage();
     }
   }, [data, setNodes, setEdges]);
+
+  const addNode = () => {
+    setNodes((e) =>
+      e.concat({
+        id: (e.length + 1).toString(),
+        data: { label: `${name}` },
+        position: {
+          x: Math.random() * window.innerWidth,
+          y: Math.random() * window.innerHeight,
+        },
+        style: { border: "10px solid #9999" },
+      })
+    );
+  };
 
   const onConnect = useCallback((params) => {
     const newEdge = { ...params, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } };
@@ -83,17 +168,55 @@ function MindMap({ data, onUpdate }) {
     onUpdate({ updatedEdges: [...edges, newEdge] });
   }, [setEdges, edges, onUpdate])
 
-  const onNodeChange = useCallback(
-    (nodeId, newLabel) => {
-      setNodes((nds) =>
-        nds.map((node) =>
-          node.id === nodeId ? { ...node, data: { ...node.data, label: newLabel } } : node
-        )
+  const refreshPage = () => {
+    window.location.reload();
+  }
+  // const nodeOrigin = [0.5, 0.5];
+  const connectionLineStyle = {
+    stroke: "#9999",
+    strokeWidth: 3,
+    
+  };
+  const defaultEdgeOptions = { style: connectionLineStyle, type: "mindmap" };
+
+  const onNodesDelete = useCallback(
+    (deleted) => {
+      setEdges(
+        deleted.reduce((acc, node) => {
+          const incomers = getIncomers(node, nodes, edges);
+          const outgoers = getOutgoers(node, nodes, edges);
+          const connectedEdges = getConnectedEdges([node], edges);
+
+          const remainingEdges = acc.filter(
+            (edge) => !connectedEdges.includes(edge),
+          );
+
+          const createdEdges = incomers.flatMap(({ id: source }) =>
+            outgoers.map(({ id: target }) => ({
+              id: `${source}->${target}`,
+              source,
+              target,
+            })),
+          );
+
+          return [...remainingEdges, ...createdEdges];
+        }, edges),
       );
-      onUpdate({ updatedNode: { id: nodeId, data: { label: newLabel }}});
     },
-    [setNodes, onUpdate]
+    [nodes, edges],
   );
+
+  // const onNodeChange = useCallback(
+  //   (nodeId, newLabel) => {
+  //     setNodes((nds) =>
+  //       nds.map((node) =>
+  //         node.id === nodeId ? { ...node, data: { ...node.data, label: newLabel } } : node
+  //       )
+  //     );
+  //     onUpdate({ updatedNode: { id: nodeId, data: { label: newLabel }}});
+  //   },
+  //   [setNodes, onUpdate]
+  // );
 
   // const onAddChild = useCallback(
   //   (parentId) => {
@@ -213,62 +336,62 @@ function MindMap({ data, onUpdate }) {
       const flow = reactFlowInstance.current;
       const { nodes, edges } = flow.toObject();
 
-    // Calculate the bounding box of all nodes
-    const bbox = nodes.reduce(
-      (acc, node) => {
-        acc.left = Math.min(acc.left, node.position.x);
-        acc.top = Math.min(acc.top, node.position.y);
-        acc.right = Math.max(acc.right, node.position.x + (node.width || 150));
-        acc.bottom = Math.max(acc.bottom, node.position.y + (node.height || 50));
-        return acc;
-      },
-      { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }
-    );
+      // Calculate the bounding box of all nodes
+      const bbox = nodes.reduce(
+        (acc, node) => {
+          acc.left = Math.min(acc.left, node.position.x);
+          acc.top = Math.min(acc.top, node.position.y);
+          acc.right = Math.max(acc.right, node.position.x + (node.width || 150));
+          acc.bottom = Math.max(acc.bottom, node.position.y + (node.height || 50));
+          return acc;
+        },
+        { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }
+      );
 
-    // Add padding
-    const padding = 50;
-    bbox.left -= padding;
-    bbox.top -= padding;
-    bbox.right += padding;
-    bbox.bottom += padding;
+      // Add padding
+      const padding = 50;
+      bbox.left -= padding;
+      bbox.top -= padding;
+      bbox.right += padding;
+      bbox.bottom += padding;
 
-    const width = bbox.right - bbox.left;
-    const height = bbox.bottom - bbox.top;
+      const width = bbox.right - bbox.left;
+      const height = bbox.bottom - bbox.top;
 
-    // Calculate the zoom level to fit the entire mind map
-    const xZoom = reactFlowWrapper.current.offsetWidth / width;
-    const yZoom = reactFlowWrapper.current.offsetHeight / height;
-    const zoomLevel = Math.min(xZoom, yZoom, 1); // Limit zoom to 0.75 to prevent excessive enlargement
+      // Calculate the zoom level to fit the entire mind map
+      const xZoom = reactFlowWrapper.current.offsetWidth / width;
+      const yZoom = reactFlowWrapper.current.offsetHeight / height;
+      const zoomLevel = Math.min(xZoom, yZoom, 1); // Limit zoom to 0.75 to prevent excessive enlargement
 
-    // Set the viewport to include all nodes
-    flow.setViewport(
-      {
-        x: -bbox.left * zoomLevel,
-        y: -bbox.top * zoomLevel,
-        zoom: zoomLevel,
-      },
-      { duration: 0 }
-    );
+      // Set the viewport to include all nodes
+      flow.setViewport(
+        {
+          x: -bbox.left * zoomLevel,
+          y: -bbox.top * zoomLevel,
+          zoom: zoomLevel,
+        },
+        { duration: 0 }
+      );
 
-    // Wait for the viewport change to take effect
-    setTimeout(() => {
-      toPng(reactFlowWrapper.current, {
-        backgroundColor: '#ffffff',
-        width: reactFlowWrapper.current.offsetWidth,
-        height: reactFlowWrapper.current.offsetHeight,
-      })
-        .then((dataUrl) => {
-          const link = document.createElement('a');
-          link.download = 'mind-map.png';
-          link.href = dataUrl;
-          link.click();
+      // Wait for the viewport change to take effect
+      setTimeout(() => {
+        toPng(reactFlowWrapper.current, {
+          backgroundColor: '#ffffff',
+          width: reactFlowWrapper.current.offsetWidth,
+          height: reactFlowWrapper.current.offsetHeight,
         })
-        .catch((error) => {
-          console.error('Error saving mind map:', error);
-        });
-    }, 100);
-  }
-}, []);
+          .then((dataUrl) => {
+            const link = document.createElement('a');
+            link.download = 'mind-map.png';
+            link.href = dataUrl;
+            link.click();
+          })
+          .catch((error) => {
+            console.error('Error saving mind map:', error);
+          });
+      }, 100);
+    }
+  }, []);
 
 // const toggleConnectionMode = () => {
 //   setConnectionMode(prev => prev ? null : 'connect');
@@ -303,18 +426,60 @@ function MindMap({ data, onUpdate }) {
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
+        onNodesDelete={onNodesDelete}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         // onNodeClick={handleNodeClick}
-        nodeTypes={nodeTypes}
+        // nodeTypes={nodeTypes}
         onInit={(instance) => (reactFlowInstance.current = instance)}
+        onLoad={onLoad}
         // onDrop={onDrop}
         // onDragOver={onDragOver}
         fitView
       >
         <Controls />
-        <Background variant="dots" gap={12} size={1} />
+        {/* <MiniMap
+          nodeColor={(n) => {
+            if (n.type === "input") return "blue";
+
+            return "#FFCC00";
+          }}
+        />
+        <Background variant="dots" gap={12} size={1} /> */}
       </ReactFlow>
+
+      <div style={{ position: 'absolute', top: 10, left: 10 }}>
+        <input 
+          type="text"
+          onChange={(e) => setName(e.target.value)}
+          name="title"
+        />
+        <button type="button" onClick={addNode}>
+          Add Node
+        </button>
+        <button type="button" onClick={handleNewMindMap}>
+          New Mind Map
+        </button>
+      </div>
+      
+      {showConfirmation && (
+        <div style={{ 
+          position: 'absolute', 
+          top: '50%', 
+          left: '50%', 
+          transform: 'translate(-50%, -50%)',
+          background: 'white',
+          padding: '20px',
+          borderRadius: '5px',
+          boxShadow: '0 0 10px rgba(0,0,0,0.1)',
+          zIndex: 1000
+        }}>
+          <p>Are you sure you want to create a new mind map? All current data will be lost.</p>
+          <button onClick={() => handleConfirmation(true)}>Yes</button>
+          <button onClick={() => handleConfirmation(false)}>No</button>
+        </div>
+      )}
+
       {/* {editingNode && (
         <div style={{ position: 'absolute', top:10, right:10, background: 'white', padding:10, zIndex: 1000}}>
           <form onSubmit={handleEditSubmit}>
@@ -376,8 +541,6 @@ function convertToReactFlowFormat(data, parentId = null, x = 0, y = 0) {
       data: { 
         label: node.name, 
         note: node.attributes?.note, 
-        onNodeChange: () => {}, // This will be set in the MindMap Component
-        // onAddChild: () => {}, // This will be set in the MindMap Component
       },
       style: { width: nodeWidth, height: nodeHeight },
     });
@@ -387,8 +550,9 @@ function convertToReactFlowFormat(data, parentId = null, x = 0, y = 0) {
         id: `${parentId}-${id}`, 
         source: parentId, 
         target: id, 
-        type: 'smoothstep', 
-        markerEnd: { type: MarkerType.ArrowClosed } });
+        // type: 'smoothstep', 
+        // markerEnd: { type: MarkerType.ArrowClosed } 
+      });
     }
 
     if (node.children) {
@@ -397,7 +561,7 @@ function convertToReactFlowFormat(data, parentId = null, x = 0, y = 0) {
         const childY = y + (index - (node.children.length - 1) / 2) * verticalSpacing;
         const { childNodes, childEdges } = processNode(child, id, childX, childY);
         nodes.push(...childNodes);
-        edges.push(...childEdges);
+        // edges.push(...childEdges);
       });
     }
 
